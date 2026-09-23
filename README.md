@@ -31,7 +31,7 @@
 
 ## 🚀 快速开始（普通用户）
 
-1. 到本仓库的 [**Releases**](../../releases) 页面下载 `卡提聊天助手_安装程序.exe`
+1. 到本仓库的 [**Releases**](../../releases) 页面下载 **KatiChat-Setup-v1.0.0.exe**
 2. **双击安装** —— 安装程序会自动：
    - 解压程序到 `%LOCALAPPDATA%\KatiChat`（**内置 Node 运行时 + llama.cpp Vulkan 库**，无需预装任何环境）
    - 下载 / 复制 AI 模型（约 5.6 GB，若安装包旁有 `models` 文件夹则直接复制）
