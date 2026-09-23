@@ -1,0 +1,22 @@
+# 模型文件（体积大，请用 tools/下载模型.ps1 获取）
+models/
+*.gguf
+
+# 运行时（Node + llama.cpp，请自行放置或用安装包内置的）
+runtime/
+
+# 运行日志
+logs/
+
+# 安装包构建产物
+installer/payload/
+installer/payload.zip
+installer/out/
+installer/*.sed
+卡提聊天助手_安装包/
+
+# 系统文件
+Thumbs.db
+desktop.ini
+.DS_Store
+*.tmp
