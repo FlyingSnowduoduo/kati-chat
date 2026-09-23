@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>卡提 · 快速输入</title>
+<link rel="icon" href="/img/whale.png">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: linear-gradient(160deg, #eef5ff, #dbe9ff);
+    color: #1c2b5a; display: flex; flex-direction: column;
+    padding: 10px 12px; gap: 8px; overflow: hidden;
+  }
+  .pill {
+    display: flex; align-items: center; gap: 10px;
+    background: #fff; border-radius: 999px; padding: 8px 12px;
+    box-shadow: 0 6px 22px rgba(40, 70, 160, .22);
+    border: 1px solid rgba(77, 107, 254, .18); flex: none;
+  }
+  .pill .logo {
+    width: 34px; height: 34px; border-radius: 50%; flex: none;
+    background: linear-gradient(135deg, #5a7bff, #4d6bfe);
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .pill .logo img { width: 30px; height: 30px; object-fit: contain; }
+  #q {
+    flex: 1; border: none; outline: none; font-size: 16px; font-family: inherit;
+    color: #1c2b5a; background: transparent; resize: none; max-height: 90px;
+    line-height: 1.5; padding: 4px 0;
+  }
+  #q::placeholder { color: #9aa7cc; }
+  .icon-btn {
+    border: none; background: #f1f5ff; color: #4d6bfe; cursor: pointer;
+    width: 34px; height: 34px; border-radius: 50%; font-size: 15px; flex: none;
+  }
+  .icon-btn:hover { background: #e2ebff; }
+  .icon-btn.on { background: #ffe4ec; color: #ff5d8f; }
+  #go {
+    border: none; background: linear-gradient(135deg, #5a7bff, #4d6bfe); color: #fff;
+    width: 34px; height: 34px; border-radius: 50%; font-size: 15px; cursor: pointer; flex: none;
+  }
+  #go:disabled { opacity: .5; }
+  #out {
+    flex: 1; overflow-y: auto; background: rgba(255, 255, 255, .97);
+    border-radius: 16px; padding: 12px 14px; font-size: 14px; line-height: 1.75;
+    box-shadow: 0 4px 18px rgba(40, 70, 160, .12); display: none;
+  }
+  #out.show { display: block; }
+  #out .q { color: #4d6bfe; font-weight: 600; margin-bottom: 6px; }
+  #out .a { white-space: pre-wrap; word-break: break-word; }
+  #out .src { margin-top: 8px; padding-top: 6px; border-top: 1px dashed rgba(77,107,254,.25); font-size: 12px; }
+  #out .src a { color: #3a54e0; text-decoration: none; margin-right: 8px; }
+  #out .err { color: #c0392b; }
+  .hint { font-size: 11px; color: #8b98c0; text-align: center; flex: none; }
+  .hint b { color: #5a6bb0; }
+</style>
+</head>
+<body>
+  <div class="pill">
+    <div class="logo"><img src="/img/whale.png" alt="卡提"></div>
+    <textarea id="q" rows="1" placeholder="尽管问，随便聊…"></textarea>
+    <button class="icon-btn" id="webBtn" title="联网搜索（自动/关闭切换）">🌐</button>
+    <button class="icon-btn" id="micBtn" title="语音输入">🎤</button>
+    <button id="go" title="发送 (Enter)">↑</button>
+  </div>
+  <div id="out"></div>
+  <div class="hint"><b>回车</b> 发送 · <b>Shift+回车</b> 换行 · <b>Esc</b> 清空 · <b>右键托盘图标</b> 打开完整界面</div>
+
+<script>
+const $ = (s) => document.querySelector(s)
+const qEl = $('#q'), outEl = $('#out'), goBtn = $('#go'), webBtn = $('#webBtn')
+let webOn = localStorage.getItem('quick_web') !== '0'
+let history = []
+let busy = false
+
+webBtn.classList.toggle('on', webOn)
+webBtn.onclick = () => {
+  webOn = !webOn
+  webBtn.classList.toggle('on', webOn)
+  localStorage.setItem('quick_web', webOn ? '1' : '0')
+  qEl.placeholder = webOn ? '尽管问（已联网）…' : '尽管问，随便聊…'
+}
+qEl.placeholder = webOn ? '尽管问（已联网）…' : '尽管问，随便聊…'
+
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
+function render(text, sources, err) {
+  let html = ''
+  if (sources && sources.length) {
+    html += '<div class="src">🔗 ' + sources.slice(0, 6).map((s, i) =>
+      `<a href="${esc(s.url)}" target="_blank" rel="noreferrer">[${i + 1}] ${esc(String(s.title || s.url).slice(0, 24))}</a>`).join('') + '</div>'
+  }
+  html += err ? `<div class="err">⚠️ ${esc(err)}</div>` : `<div class="a">${esc(text)}</div>`
+  outEl.innerHTML = html
+  outEl.scrollTop = outEl.scrollHeight
+}
+
+async function send() {
+  const text = qEl.value.trim()
+  if (!text || busy) return
+  busy = true; goBtn.disabled = true
+  outEl.classList.add('show')
+  outEl.innerHTML = '<div class="a" style="color:#8b98c0">思考中…</div>'
+  history.push({ role: 'user', text })
+  qEl.value = ''
+  let full = '', sources = [], err = ''
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'qwen2.5-vl-7b',
+        messages: [{ role: 'system', content: '你是「卡提」，用中文亲切地回答，简明扼要，Markdown 排版。' },
+          ...history.map(m => ({ role: m.role, content: m.text }))],
+        web: webOn ? 'auto' : 'off',
+        options: { num_predict: 400 },
+      }),
+    })
+    const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf = ''
+    while (true) {
+      const { done, value } = await reader.read(); if (done) break
+      buf += dec.decode(value, { stream: true })
+      const lines = buf.split('\n'); buf = lines.pop()
+      for (const line of lines) {
+        if (!line.trim()) continue
+        let o; try { o = JSON.parse(line) } catch { continue }
+        if (o.error) { err = o.error; continue }
+        if (o.sources) sources = o.sources
+        if (o.message && o.message.content) { full += o.message.content; render(full, sources, '') }
+      }
+    }
+    if (!full && !err) err = '没有收到回复，请重试'
+    if (full) { history.push({ role: 'assistant', text: full }); if (history.length > 8) history = history.slice(-8) }
+    render(full || '（无内容）', sources, err)
+  } catch (e) {
+    render('', [], '无法连接本地服务：' + e.message)
+  } finally {
+    busy = false; goBtn.disabled = false; qEl.focus()
+  }
+}
+
+goBtn.onclick = send
+qEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+  if (e.key === 'Escape') { history = []; outEl.classList.remove('show'); outEl.innerHTML = ''; qEl.value = '' }
+})
+// 语音输入
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+if (SR) {
+  const rec = new SR(); rec.lang = 'zh-CN'; rec.interimResults = true
+  const micBtn = $('#micBtn')
+  let listening = false
+  rec.onresult = e => { let t = ''; for (const r of e.results) t += r[0].transcript; qEl.value = t }
+  const stop = () => { listening = false; micBtn.classList.remove('on') }
+  rec.onend = stop; rec.onerror = stop
+  micBtn.onclick = () => { if (listening) { rec.stop(); return } try { rec.start() } catch { return } listening = true; micBtn.classList.add('on') }
+} else { $('#micBtn').style.display = 'none' }
+qEl.focus()
+</script>
+</body>
+</html>
